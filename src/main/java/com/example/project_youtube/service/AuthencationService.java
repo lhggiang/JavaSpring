@@ -10,18 +10,20 @@ import com.example.project_youtube.exception.ErrorCode;
 import com.example.project_youtube.repository.UserRepository;
 import com.nimbusds.jose.*;
 import com.nimbusds.jose.crypto.MACSigner;
+import com.nimbusds.jose.crypto.MACVerifier;
 import com.nimbusds.jwt.JWTClaimsSet;
+import com.nimbusds.jwt.SignedJWT;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 import lombok.experimental.NonFinal;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.expression.ParseException;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
+import java.text.ParseException;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Date;
@@ -39,19 +41,20 @@ public class AuthencationService {
     protected String SIGNER_KEY;
 
     public IntrospectResponse introspect(IntrospectRequest request) throws JOSEException, ParseException {
-        var token = request.getToken();
-        boolean isValid = true;
+        String token = request.getToken();
 
-        try {
-//            verifyToken(token, false);
-        } catch (AppException e) {
-            isValid = false;
-        }
+        JWSVerifier verifier = new MACVerifier(SIGNER_KEY.getBytes());
 
-        return IntrospectResponse.builder().valid(isValid).build();
+        SignedJWT signedJWT = SignedJWT.parse(token);
+
+        boolean verified = signedJWT.verify(verifier);
+
+        Date expiryTime = signedJWT.getJWTClaimsSet().getExpirationTime();
+
+        return IntrospectResponse.builder().valid(verified && expiryTime.after(new Date())).build();
     }
 
-    public AuthenticationResponse authenticated(AuthenticationRequest request) throws ParseException, JOSEException {
+    public AuthenticationResponse authenticated(AuthenticationRequest request){
         User user = userRepository.findByUsername(request.getUsername()).orElseThrow(() -> new AppException(ErrorCode.USER_EXISTED));
         PasswordEncoder passwordEncoder = new BCryptPasswordEncoder(10);
         boolean authenticated = passwordEncoder.matches(request.getPassword(), user.getPassword());
@@ -66,13 +69,13 @@ public class AuthencationService {
     public String generateToken(String username){
         //header
         JWSHeader header = new JWSHeader(JWSAlgorithm.HS512);
-        //claim
+        //claim: nội dung gửi đi
         JWTClaimsSet jwtClaimsSet = new JWTClaimsSet.Builder()
                 .subject(username) //Tên người dùng
                 .issuer("giang")   //Nơi phát hành token
                 .issueTime(new Date())
                 .expirationTime(new Date(
-                        Instant.now().plus(1, ChronoUnit.SECONDS).toEpochMilli()))
+                        Instant.now().plus(1, ChronoUnit.HOURS).toEpochMilli()))
                 .claim("scope", "abc") //custom claim
                 .build();
         //payload
