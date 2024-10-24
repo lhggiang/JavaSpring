@@ -42,15 +42,18 @@ public class AuthencationService {
 
     public IntrospectResponse introspect(IntrospectRequest request) throws JOSEException, ParseException {
         String token = request.getToken();
-
+        
+        //Tạo một đối tượng verifier dùng để xác thực token
         JWSVerifier verifier = new MACVerifier(SIGNER_KEY.getBytes());
 
+        //Chuyển đổi chuỗi token thành đối tượng SignedJWT
         SignedJWT signedJWT = SignedJWT.parse(token);
 
         boolean verified = signedJWT.verify(verifier);
 
         Date expiryTime = signedJWT.getJWTClaimsSet().getExpirationTime();
 
+        //Kiểm tra xem thời gian hết hạn có sau thời điểm hiện tại không và JWT có hợp lệ không
         return IntrospectResponse.builder().valid(verified && expiryTime.after(new Date())).build();
     }
 
